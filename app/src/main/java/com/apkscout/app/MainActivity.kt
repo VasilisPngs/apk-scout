@@ -228,7 +228,7 @@ fun APKScoutScreen() {
                         includeSystemApps = includeSystemApps,
                         onIncludeSystemAppsChange = { includeSystemApps = it },
                         selectedFilter = selectedFilter,
-                        onFilterChange = { onFilterChange(it) }
+                        onFilterChange = { selectedFilter = it }
                     )
                 }
 
@@ -250,8 +250,6 @@ fun APKScoutScreen() {
         }
     }
 }
-
-private fun onFilterChange(filter: AppListFilter): AppListFilter = filter
 
 @Composable
 fun TopBar(

@@ -468,7 +468,7 @@ fun UpdateStatusBlock(status: AppUpdateStatus) {
             "Release: ${status.title}. Variants found: ${status.totalCount}. Regular APK: ${status.regularApkCount}. Non-APK: ${status.nonApkCount}."
         }
         is AppUpdateStatus.CompatibleApkCandidatesParsed -> {
-            "Release: ${status.title}. Compatible regular APK: ${status.compatibleApkCount}/${status.regularApkCount}. Non-APK hidden: ${status.nonApkCount}."
+            "Release: ${status.title}. Compatible regular APK: ${status.compatibleApkCount}/${status.regularApkCount}. Version code check not confirmed yet. Non-APK hidden: ${status.nonApkCount}."
         }
         AppUpdateStatus.UpToDate -> "Installed version is already current."
         AppUpdateStatus.NoCompatibleApk -> "No regular APK matched this device."

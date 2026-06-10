@@ -16,6 +16,10 @@ object ApkMirrorHtmlFetcher {
         return fetch(url = url)
     }
 
+    suspend fun fetchVariantPage(url: String): ApkMirrorFetchResult {
+        return fetch(url = url)
+    }
+
     private suspend fun fetch(url: String): ApkMirrorFetchResult {
         return withContext(Dispatchers.IO) {
             runCatching {

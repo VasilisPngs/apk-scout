@@ -7,9 +7,17 @@ import java.net.URI
 
 object ApkMirrorHtmlFetcher {
     suspend fun fetchSearchPage(packageName: String): ApkMirrorFetchResult {
-        return withContext(Dispatchers.IO) {
-            val url = ApkMirrorSource.searchUrl(packageName).toString()
+        return fetch(
+            url = ApkMirrorSource.searchUrl(packageName).toString()
+        )
+    }
 
+    suspend fun fetchReleasePage(url: String): ApkMirrorFetchResult {
+        return fetch(url = url)
+    }
+
+    private suspend fun fetch(url: String): ApkMirrorFetchResult {
+        return withContext(Dispatchers.IO) {
             runCatching {
                 val connection = URI(url).toURL().openConnection() as HttpURLConnection
 
@@ -23,7 +31,6 @@ object ApkMirrorHtmlFetcher {
                     "User-Agent",
                     "Mozilla/5.0 (Android 16; Mobile) APKScout/0.1.0"
                 )
-
                 connection.useCaches = false
 
                 val code = connection.responseCode

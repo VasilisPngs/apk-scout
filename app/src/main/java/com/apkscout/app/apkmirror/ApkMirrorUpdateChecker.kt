@@ -10,30 +10,47 @@ object ApkMirrorUpdateChecker {
         device: DeviceSpec,
         regularApkOnly: Boolean
     ): AppUpdateStatus {
-        val result = ApkMirrorHtmlFetcher.fetchSearchPage(packageName)
+        val searchResult = ApkMirrorHtmlFetcher.fetchSearchPage(packageName)
 
-        return when (result) {
+        return when (searchResult) {
             is ApkMirrorFetchResult.Success -> {
-                val links = ApkMirrorSearchParser.parseReleaseLinks(result.html)
+                val links = ApkMirrorSearchParser.parseReleaseLinks(searchResult.html)
+                val firstReleaseUrl = links.firstOrNull()
 
-                if (links.isEmpty()) {
+                if (firstReleaseUrl == null) {
                     AppUpdateStatus.NoCompatibleApk
                 } else {
-                    AppUpdateStatus.SearchResultsFound(
-                        count = links.size
-                    )
+                    when (val releaseResult = ApkMirrorHtmlFetcher.fetchReleasePage(firstReleaseUrl)) {
+                        is ApkMirrorFetchResult.Success -> {
+                            AppUpdateStatus.ReleasePageLoaded(
+                                releaseUrl = releaseResult.url
+                            )
+                        }
+
+                        is ApkMirrorFetchResult.HttpError -> {
+                            AppUpdateStatus.Error(
+                                message = "APKMirror release HTTP ${releaseResult.code}: ${releaseResult.message}"
+                            )
+                        }
+
+                        is ApkMirrorFetchResult.NetworkError -> {
+                            AppUpdateStatus.Error(
+                                message = "APKMirror release network error: ${releaseResult.message}"
+                            )
+                        }
+                    }
                 }
             }
 
             is ApkMirrorFetchResult.HttpError -> {
                 AppUpdateStatus.Error(
-                    message = "APKMirror HTTP ${result.code}: ${result.message}"
+                    message = "APKMirror search HTTP ${searchResult.code}: ${searchResult.message}"
                 )
             }
 
             is ApkMirrorFetchResult.NetworkError -> {
                 AppUpdateStatus.Error(
-                    message = "APKMirror network error: ${result.message}"
+                    message = "APKMirror search network error: ${searchResult.message}"
                 )
             }
         }

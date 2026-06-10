@@ -14,6 +14,10 @@ sealed interface AppUpdateStatus {
         val count: Int
     ) : AppUpdateStatus
 
+    data class ReleasePageLoaded(
+        val releaseUrl: String
+    ) : AppUpdateStatus
+
     data object UpToDate : AppUpdateStatus
     data object NoCompatibleApk : AppUpdateStatus
     data object OnlyBundleFound : AppUpdateStatus

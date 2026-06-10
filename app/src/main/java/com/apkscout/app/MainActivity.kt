@@ -98,6 +98,13 @@ data class CachedUpdateResult(
     val regularApkOnly: Boolean
 )
 
+enum class AppListFilter {
+    ALL,
+    UPDATES,
+    UNCHECKED,
+    ERRORS
+}
+
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -128,6 +135,44 @@ fun APKScoutTheme(content: @Composable () -> Unit) {
         colorScheme = colors,
         content = content
     )
+}
+
+fun filterAndSortApps(
+    apps: List<InstalledApp>,
+    updateStates: Map<String, AppUpdateStatus>,
+    filter: AppListFilter
+): List<InstalledApp> {
+    return apps
+        .filter { app ->
+            val status = updateStates[app.packageName] ?: AppUpdateStatus.NotChecked
+
+            when (filter) {
+                AppListFilter.ALL -> true
+                AppListFilter.UPDATES -> status is AppUpdateStatus.UpdateAvailable
+                AppListFilter.UNCHECKED -> status is AppUpdateStatus.NotChecked
+                AppListFilter.ERRORS -> status is AppUpdateStatus.Error
+            }
+        }
+        .sortedWith(
+            compareBy<InstalledApp> { app ->
+                updatePriority(updateStates[app.packageName] ?: AppUpdateStatus.NotChecked)
+            }.thenBy { app ->
+                app.label.lowercase()
+            }.thenBy { app ->
+                app.packageName
+            }
+        )
+}
+
+fun updatePriority(status: AppUpdateStatus): Int {
+    return when (status) {
+        is AppUpdateStatus.UpdateAvailable -> 0
+        AppUpdateStatus.Checking -> 1
+        is AppUpdateStatus.Error -> 2
+        AppUpdateStatus.NotChecked -> 3
+        AppUpdateStatus.UpToDate -> 4
+        else -> 5
+    }
 }
 
 fun CachedUpdateResult?.freshStatus(
@@ -189,6 +234,7 @@ fun APKScoutScreen() {
     var includeSystemApps by remember { mutableStateOf(false) }
     var regularApkOnly by remember { mutableStateOf(true) }
     var checkingAll by remember { mutableStateOf(false) }
+    var appListFilter by remember { mutableStateOf(AppListFilter.ALL) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var apps by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
     var updateStates by remember { mutableStateOf<Map<String, AppUpdateStatus>>(emptyMap()) }
@@ -199,6 +245,14 @@ fun APKScoutScreen() {
         calculateUpdateSummary(
             apps = apps,
             updateStates = updateStates
+        )
+    }
+
+    val visibleApps = remember(apps, updateStates, appListFilter) {
+        filterAndSortApps(
+            apps = apps,
+            updateStates = updateStates,
+            filter = appListFilter
         )
     }
 
@@ -251,7 +305,9 @@ fun APKScoutScreen() {
                         onRegularApkOnlyChange = { regularApkOnly = it },
                         summary = updateSummary,
                         cachedCount = checkCache.size,
-                        appCount = apps.size,
+                        appCount = visibleApps.size,
+                        selectedFilter = appListFilter,
+                        onFilterChange = { appListFilter = it },
                         checkingAll = checkingAll,
                         onCheckVisibleApps = {
                             if (!checkingAll && apps.isNotEmpty()) {
@@ -259,7 +315,7 @@ fun APKScoutScreen() {
                                     checkingAll = true
 
                                     try {
-                                        apps.forEachIndexed { index, app ->
+                                        visibleApps.forEachIndexed { index, app ->
                                             val cachedStatus = checkCache[app.packageName].freshStatus(regularApkOnly)
 
                                             if (cachedStatus != null) {
@@ -301,7 +357,7 @@ fun APKScoutScreen() {
                 }
 
                 items(
-                    items = apps,
+                    items = visibleApps,
                     key = { it.packageName }
                 ) { app ->
                     InstalledAppCard(
@@ -451,6 +507,8 @@ fun ControlsCard(
     summary: UpdateSummary,
     cachedCount: Int,
     appCount: Int,
+    selectedFilter: AppListFilter,
+    onFilterChange: (AppListFilter) -> Unit,
     checkingAll: Boolean,
     onCheckVisibleApps: () -> Unit
 ) {
@@ -482,11 +540,16 @@ fun ControlsCard(
                 )
 
                 FilterChip(
-                    selected = false,
-                    onClick = {},
-                    label = { Text("APK-only filter") }
+                    selected = regularApkOnly,
+                    onClick = onRegularApkOnlyChange,
+                    label = { Text("APK only") }
                 )
             }
+
+            AppFilterChips(
+                selectedFilter = selectedFilter,
+                onFilterChange = onFilterChange
+            )
 
             Text(
                 text = "Checked ${summary.checked}/${summary.total} • Checking ${summary.checking} • Updates ${summary.updates} • Up to date ${summary.upToDate} • Errors ${summary.errors} • Cached $cachedCount",
@@ -508,6 +571,41 @@ fun ControlsCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
+    }
+}
+
+@Composable
+fun AppFilterChips(
+    selectedFilter: AppListFilter,
+    onFilterChange: (AppListFilter) -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        FilterChip(
+            selected = selectedFilter == AppListFilter.ALL,
+            onClick = { onFilterChange(AppListFilter.ALL) },
+            label = { Text("All") }
+        )
+
+        FilterChip(
+            selected = selectedFilter == AppListFilter.UPDATES,
+            onClick = { onFilterChange(AppListFilter.UPDATES) },
+            label = { Text("Updates") }
+        )
+
+        FilterChip(
+            selected = selectedFilter == AppListFilter.UNCHECKED,
+            onClick = { onFilterChange(AppListFilter.UNCHECKED) },
+            label = { Text("Unchecked") }
+        )
+
+        FilterChip(
+            selected = selectedFilter == AppListFilter.ERRORS,
+            onClick = { onFilterChange(AppListFilter.ERRORS) },
+            label = { Text("Errors") }
+        )
     }
 }
 

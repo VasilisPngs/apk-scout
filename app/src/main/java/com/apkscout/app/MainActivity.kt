@@ -6,6 +6,8 @@ import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
+import com.apkscout.app.core.model.ApkFormat
+import com.apkscout.app.core.model.AppUpdateStatus
 import com.apkscout.app.apkmirror.ApkMirrorSource
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -113,6 +115,7 @@ fun APKScoutScreen() {
     var includeSystemApps by remember { mutableStateOf(false) }
     var regularApkOnly by remember { mutableStateOf(true) }
     var apps by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
+    var updateStates by remember { mutableStateOf<Map<String, AppUpdateStatus>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
 
     LaunchedEffect(includeSystemApps) {
@@ -120,6 +123,7 @@ fun APKScoutScreen() {
         apps = withContext(Dispatchers.Default) {
             scanInstalledApps(context.packageManager, includeSystemApps)
         }
+        updateStates = apps.associate { it.packageName to AppUpdateStatus.NotChecked }
         loading = false
     }
 
@@ -170,6 +174,7 @@ fun APKScoutScreen() {
                 ) { app ->
                     InstalledAppCard(
                         app = app,
+                        status = updateStates[app.packageName] ?: AppUpdateStatus.NotChecked,
                         onOpenSource = { openAPKMirror(context, app.packageName) }
                     )
                 }
@@ -326,6 +331,7 @@ fun SettingRow(
 @Composable
 fun InstalledAppCard(
     app: InstalledApp,
+    status: AppUpdateStatus,
     onOpenSource: () -> Unit
 ) {
     ElevatedCard(
@@ -377,6 +383,8 @@ fun InstalledAppCard(
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
 
+            UpdateStatusBlock(status = status)
+
             Button(
                 onClick = onOpenSource,
                 modifier = Modifier.fillMaxWidth()
@@ -386,6 +394,64 @@ fun InstalledAppCard(
         }
     }
 }
+
+@Composable
+fun UpdateStatusBlock(status: AppUpdateStatus) {
+    val title = when (status) {
+        AppUpdateStatus.NotChecked -> "Not checked"
+        AppUpdateStatus.Checking -> "Checking APKMirror"
+        is AppUpdateStatus.UpdateAvailable -> "Update available"
+        AppUpdateStatus.UpToDate -> "Up to date"
+        AppUpdateStatus.NoCompatibleApk -> "No compatible APK"
+        AppUpdateStatus.OnlyBundleFound -> "Only bundle found"
+        AppUpdateStatus.IncompatibleVariant -> "Incompatible variant"
+        is AppUpdateStatus.Error -> "Error"
+    }
+
+    val description = when (status) {
+        AppUpdateStatus.NotChecked -> "APKMirror has not been checked yet."
+        AppUpdateStatus.Checking -> "Searching APKMirror for compatible APK variants."
+        is AppUpdateStatus.UpdateAvailable -> "Latest compatible APK: ${status.versionName} (${status.versionCode})"
+        AppUpdateStatus.UpToDate -> "Installed version is already current."
+        AppUpdateStatus.NoCompatibleApk -> "No regular APK matched this device."
+        AppUpdateStatus.OnlyBundleFound -> "Latest result requires bundle handling."
+        AppUpdateStatus.IncompatibleVariant -> "Latest result does not match this device."
+        is AppUpdateStatus.Error -> status.message
+    }
+
+    val format = when (status) {
+        is AppUpdateStatus.UpdateAvailable -> "Format: ${status.format.name}"
+        AppUpdateStatus.OnlyBundleFound -> "Format: bundle"
+        else -> null
+    }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.primary,
+            fontWeight = FontWeight.SemiBold
+        )
+
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
+
+        if (format != null) {
+            Text(
+                text = format,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
 
 @Composable
 fun GlassCard(content: @Composable () -> Unit) {

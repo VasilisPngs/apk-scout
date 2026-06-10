@@ -55,7 +55,10 @@ jobs:
       - name: Prepare release asset
         run: |
           mkdir -p dist
-          cp app/build/outputs/apk/release/app-release.apk "dist/APKScout-${GITHUB_REF_NAME}.apk"
+          APK_PATH="$(find app/build/outputs/apk/release -maxdepth 1 -name '*.apk' | head -n 1)"
+          test -n "$APK_PATH"
+          cp "$APK_PATH" "dist/APKScout-${GITHUB_REF_NAME}.apk"
+          ls -la dist
 
       - name: Create GitHub release
         env:

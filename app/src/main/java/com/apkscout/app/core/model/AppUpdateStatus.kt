@@ -47,6 +47,10 @@ sealed interface AppUpdateStatus {
     data object OnlyBundleFound : AppUpdateStatus
     data object IncompatibleVariant : AppUpdateStatus
 
+    data class AutomatedCheckBlocked(
+        val message: String
+    ) : AppUpdateStatus
+
     data class Error(
         val message: String
     ) : AppUpdateStatus

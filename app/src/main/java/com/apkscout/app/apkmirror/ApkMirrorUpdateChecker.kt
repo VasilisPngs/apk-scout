@@ -24,12 +24,7 @@ object ApkMirrorUpdateChecker {
                 html = searchResult.html
             )
 
-            is ApkMirrorFetchResult.HttpError -> {
-                AppUpdateStatus.Error(
-                    message = "APKMirror search HTTP ${searchResult.code}: ${searchResult.message}"
-                )
-            }
-
+            is ApkMirrorFetchResult.HttpError -> searchResult.toStatus("search")
             is ApkMirrorFetchResult.NetworkError -> {
                 AppUpdateStatus.Error(
                     message = "APKMirror search network error: ${searchResult.message}"
@@ -58,12 +53,7 @@ object ApkMirrorUpdateChecker {
                 releaseUrl = releaseResult.url
             )
 
-            is ApkMirrorFetchResult.HttpError -> {
-                AppUpdateStatus.Error(
-                    message = "APKMirror release HTTP ${releaseResult.code}: ${releaseResult.message}"
-                )
-            }
-
+            is ApkMirrorFetchResult.HttpError -> releaseResult.toStatus("release")
             is ApkMirrorFetchResult.NetworkError -> {
                 AppUpdateStatus.Error(
                     message = "APKMirror release network error: ${releaseResult.message}"
@@ -171,17 +161,28 @@ object ApkMirrorUpdateChecker {
                 }
             }
 
-            is ApkMirrorFetchResult.HttpError -> {
-                AppUpdateStatus.Error(
-                    message = "APKMirror variant HTTP ${variantResult.code}: ${variantResult.message}"
-                )
-            }
-
+            is ApkMirrorFetchResult.HttpError -> variantResult.toStatus("variant")
             is ApkMirrorFetchResult.NetworkError -> {
                 AppUpdateStatus.Error(
                     message = "APKMirror variant network error: ${variantResult.message}"
                 )
             }
+        }
+    }
+
+    private fun ApkMirrorFetchResult.HttpError.toStatus(stage: String): AppUpdateStatus {
+        return when (code) {
+            403 -> AppUpdateStatus.AutomatedCheckBlocked(
+                message = "APKMirror blocked automated $stage checks. Open APKMirror manually."
+            )
+
+            429 -> AppUpdateStatus.AutomatedCheckBlocked(
+                message = "APKMirror rate-limited automated $stage checks. Wait and open APKMirror manually."
+            )
+
+            else -> AppUpdateStatus.Error(
+                message = "APKMirror $stage HTTP $code: $message"
+            )
         }
     }
 }

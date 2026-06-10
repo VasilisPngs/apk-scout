@@ -10,13 +10,14 @@ Early Android 16+ Kotlin/Compose app.
 
 - Scans installed Android apps locally
 - Opens APKMirror search pages
-- Checks APKMirror pages one app at a time
+- Opens APKMirror pages per app
+- Handles APKMirror automated-check blocking explicitly
 - Filters regular APK candidates
 - Rejects unsupported bundle-style formats by default
 - Compares compatible APK version codes when available
 - Caches successful APKMirror checks for 15 minutes
 - Supports per-app APKMirror refresh to bypass cache
-- Batch checks only pending or failed visible apps
+- Batch automated checks are disabled because APKMirror blocks automated requests
 
 ## Package
 

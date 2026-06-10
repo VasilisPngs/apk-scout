@@ -4,11 +4,16 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.BitmapDrawable
+import android.graphics.drawable.Drawable
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
@@ -23,17 +28,25 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilterChip
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
@@ -45,12 +58,15 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
@@ -65,7 +81,8 @@ data class InstalledApp(
     val packageName: String,
     val versionName: String,
     val versionCode: Long,
-    val isSystem: Boolean
+    val isSystem: Boolean,
+    val icon: Bitmap?
 )
 
 data class DeviceProfile(
@@ -119,10 +136,12 @@ fun APKScoutScreen() {
 
     var includeSystemApps by remember { mutableStateOf(false) }
     var selectedFilter by remember { mutableStateOf(AppListFilter.ALL) }
+    var searchQuery by remember { mutableStateOf("") }
+    var scanRequest by remember { mutableIntStateOf(0) }
     var apps by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
     var loading by remember { mutableStateOf(true) }
 
-    LaunchedEffect(includeSystemApps) {
+    LaunchedEffect(includeSystemApps, scanRequest) {
         loading = true
         apps = withContext(Dispatchers.Default) {
             scanInstalledApps(
@@ -133,10 +152,11 @@ fun APKScoutScreen() {
         loading = false
     }
 
-    val visibleApps = remember(apps, selectedFilter) {
+    val visibleApps = remember(apps, selectedFilter, searchQuery) {
         filterApps(
             apps = apps,
-            filter = selectedFilter
+            filter = selectedFilter,
+            query = searchQuery
         )
     }
 
@@ -165,6 +185,13 @@ fun APKScoutScreen() {
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
                 item {
+                    TopBar(
+                        loading = loading,
+                        onRefresh = { scanRequest++ }
+                    )
+                }
+
+                item {
                     HeaderCard(
                         profile = profile,
                         totalCount = apps.size,
@@ -178,7 +205,9 @@ fun APKScoutScreen() {
                         includeSystemApps = includeSystemApps,
                         onIncludeSystemAppsChange = { includeSystemApps = it },
                         selectedFilter = selectedFilter,
-                        onFilterChange = { selectedFilter = it }
+                        onFilterChange = { selectedFilter = it },
+                        searchQuery = searchQuery,
+                        onSearchQueryChange = { searchQuery = it }
                     )
                 }
 
@@ -197,6 +226,34 @@ fun APKScoutScreen() {
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+fun TopBar(
+    loading: Boolean,
+    onRefresh: () -> Unit
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "APKScout",
+            modifier = Modifier.weight(1f),
+            style = MaterialTheme.typography.headlineMedium,
+            fontWeight = FontWeight.Bold
+        )
+
+        IconButton(
+            onClick = onRefresh,
+            enabled = !loading
+        ) {
+            Icon(
+                imageVector = Icons.Rounded.Refresh,
+                contentDescription = "Refresh apps"
+            )
         }
     }
 }
@@ -224,13 +281,13 @@ fun HeaderCard(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             Text(
-                text = "APKScout",
-                style = MaterialTheme.typography.headlineLarge,
+                text = "APKMirror scout",
+                style = MaterialTheme.typography.titleLarge,
                 fontWeight = FontWeight.Bold
             )
 
             Text(
-                text = "APKMirror scout for installed Android apps.",
+                text = "Local app inventory with direct APKMirror lookup.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -275,12 +332,28 @@ fun ControlsCard(
     includeSystemApps: Boolean,
     onIncludeSystemAppsChange: (Boolean) -> Unit,
     selectedFilter: AppListFilter,
-    onFilterChange: (AppListFilter) -> Unit
+    onFilterChange: (AppListFilter) -> Unit,
+    searchQuery: String,
+    onSearchQueryChange: (String) -> Unit
 ) {
     GlassCard {
         Column(
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
+            OutlinedTextField(
+                value = searchQuery,
+                onValueChange = onSearchQueryChange,
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                label = { Text("Search apps") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Search,
+                        contentDescription = null
+                    )
+                }
+            )
+
             SettingRow(
                 title = "Show system apps",
                 description = "Hidden by default to avoid OEM and core Android noise.",
@@ -311,7 +384,7 @@ fun ControlsCard(
             }
 
             Text(
-                text = "APKMirror automated checks are blocked by server-side protection. Open APKMirror manually per app.",
+                text = "APKMirror automated checks are blocked by server-side protection. Use Open APKMirror per app.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -366,55 +439,93 @@ fun InstalledAppCard(
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
         ),
-        shape = RoundedCornerShape(26.dp)
+        shape = RoundedCornerShape(24.dp)
     ) {
-        Column(
-            modifier = Modifier.padding(18.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
+        Row(
+            modifier = Modifier.padding(16.dp),
+            horizontalArrangement = Arrangement.spacedBy(14.dp),
+            verticalAlignment = Alignment.Top
         ) {
-            Row(
-                verticalAlignment = Alignment.Top
+            Surface(
+                modifier = Modifier.size(58.dp),
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.72f),
+                tonalElevation = 2.dp
             ) {
-                Column(
-                    modifier = Modifier.weight(1f),
-                    verticalArrangement = Arrangement.spacedBy(3.dp)
+                Box(
+                    modifier = Modifier.fillMaxSize(),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Text(
-                        text = app.label,
-                        style = MaterialTheme.typography.titleMedium,
-                        fontWeight = FontWeight.SemiBold,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
+                    app.icon?.let {
+                        Image(
+                            bitmap = it.asImageBitmap(),
+                            contentDescription = null,
+                            modifier = Modifier
+                                .size(52.dp)
+                                .clip(CircleShape)
+                        )
+                    }
+                }
+            }
 
-                    Text(
-                        text = app.packageName,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Row(
+                    verticalAlignment = Alignment.Top
+                ) {
+                    Column(
+                        modifier = Modifier.weight(1f),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = app.label,
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+
+                        Text(
+                            text = app.packageName,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    AssistChip(
+                        onClick = {},
+                        label = { Text(if (app.isSystem) "System" else "User") }
                     )
                 }
 
-                Spacer(modifier = Modifier.width(12.dp))
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                ) {
+                    Text(
+                        text = "Installed: ${app.versionName}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
 
-                AssistChip(
-                    onClick = {},
-                    label = { Text(if (app.isSystem) "System" else "User") }
-                )
-            }
+                    Text(
+                        text = "Version code: ${app.versionCode}",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
 
-            Text(
-                text = "Installed: ${app.versionName} (${app.versionCode})",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-
-            Button(
-                onClick = onOpenAPKMirror,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Open APKMirror")
+                Button(
+                    onClick = onOpenAPKMirror,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Open APKMirror")
+                }
             }
         }
     }
@@ -445,14 +556,23 @@ fun GlassCard(content: @Composable () -> Unit) {
 
 fun filterApps(
     apps: List<InstalledApp>,
-    filter: AppListFilter
+    filter: AppListFilter,
+    query: String
 ): List<InstalledApp> {
+    val normalizedQuery = query.trim().lowercase()
+
     return apps.filter { app ->
-        when (filter) {
+        val matchesFilter = when (filter) {
             AppListFilter.ALL -> true
             AppListFilter.USER -> !app.isSystem
             AppListFilter.SYSTEM -> app.isSystem
         }
+
+        val matchesQuery = normalizedQuery.isEmpty() ||
+            app.label.lowercase().contains(normalizedQuery) ||
+            app.packageName.lowercase().contains(normalizedQuery)
+
+        matchesFilter && matchesQuery
     }
 }
 
@@ -476,13 +596,28 @@ fun scanInstalledApps(
                 packageName = info.packageName,
                 versionName = info.versionName ?: "Unknown",
                 versionCode = info.longVersionCode,
-                isSystem = isSystem
+                isSystem = isSystem,
+                icon = appInfo.loadIcon(packageManager).toBitmap(size = 96)
             )
         }
         .sortedWith(
             compareBy<InstalledApp> { it.label.lowercase() }
                 .thenBy { it.packageName }
         )
+}
+
+fun Drawable.toBitmap(size: Int): Bitmap {
+    if (this is BitmapDrawable && bitmap != null) {
+        return bitmap
+    }
+
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+
+    setBounds(0, 0, canvas.width, canvas.height)
+    draw(canvas)
+
+    return bitmap
 }
 
 fun openAPKMirror(

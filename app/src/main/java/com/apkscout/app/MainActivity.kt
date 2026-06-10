@@ -81,6 +81,8 @@ data class DeviceProfile(
     val abis: String
 )
 
+private const val APKMIRROR_CHECK_CACHE_TTL_MS = 15L * 60L * 1000L
+
 data class UpdateSummary(
     val total: Int,
     val checked: Int,
@@ -88,6 +90,12 @@ data class UpdateSummary(
     val updates: Int,
     val upToDate: Int,
     val errors: Int
+)
+
+data class CachedUpdateResult(
+    val status: AppUpdateStatus,
+    val checkedAtMillis: Long,
+    val regularApkOnly: Boolean
 )
 
 class MainActivity : ComponentActivity() {
@@ -122,6 +130,40 @@ fun APKScoutTheme(content: @Composable () -> Unit) {
     )
 }
 
+fun CachedUpdateResult?.freshStatus(
+    regularApkOnly: Boolean
+): AppUpdateStatus? {
+    if (this == null) return null
+    if (this.regularApkOnly != regularApkOnly) return null
+
+    val ageMillis = System.currentTimeMillis() - checkedAtMillis
+
+    if (ageMillis !in 0..APKMIRROR_CHECK_CACHE_TTL_MS) return null
+
+    return status
+}
+
+fun AppUpdateStatus.toCacheEntry(
+    regularApkOnly: Boolean
+): CachedUpdateResult? {
+    if (!isReusableCachedResult()) return null
+
+    return CachedUpdateResult(
+        status = this,
+        checkedAtMillis = System.currentTimeMillis(),
+        regularApkOnly = regularApkOnly
+    )
+}
+
+fun AppUpdateStatus.isReusableCachedResult(): Boolean {
+    return when (this) {
+        AppUpdateStatus.NotChecked,
+        AppUpdateStatus.Checking -> false
+        is AppUpdateStatus.Error -> false
+        else -> true
+    }
+}
+
 fun calculateUpdateSummary(
     apps: List<InstalledApp>,
     updateStates: Map<String, AppUpdateStatus>
@@ -150,6 +192,7 @@ fun APKScoutScreen() {
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var apps by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
     var updateStates by remember { mutableStateOf<Map<String, AppUpdateStatus>>(emptyMap()) }
+    var checkCache by remember { mutableStateOf<Map<String, CachedUpdateResult>>(emptyMap()) }
     var loading by remember { mutableStateOf(true) }
 
     val updateSummary = remember(apps, updateStates) {
@@ -207,6 +250,7 @@ fun APKScoutScreen() {
                         regularApkOnly = regularApkOnly,
                         onRegularApkOnlyChange = { regularApkOnly = it },
                         summary = updateSummary,
+                        cachedCount = checkCache.size,
                         appCount = apps.size,
                         checkingAll = checkingAll,
                         onCheckVisibleApps = {
@@ -216,25 +260,35 @@ fun APKScoutScreen() {
 
                                     try {
                                         apps.forEachIndexed { index, app ->
-                                            updateStates = updateStates + (app.packageName to AppUpdateStatus.Checking)
+                                            val cachedStatus = checkCache[app.packageName].freshStatus(regularApkOnly)
 
-                                            val result = runCatching {
-                                                ApkMirrorUpdateChecker.check(
-                                                    packageName = app.packageName,
-                                                    installedVersionCode = app.versionCode,
-                                                    device = profile.toDeviceSpec(),
-                                                    regularApkOnly = regularApkOnly
-                                                )
-                                            }.getOrElse { error ->
-                                                AppUpdateStatus.Error(
-                                                    message = error.message ?: "Unexpected APKMirror check error"
-                                                )
-                                            }
+                                            if (cachedStatus != null) {
+                                                updateStates = updateStates + (app.packageName to cachedStatus)
+                                            } else {
+                                                updateStates = updateStates + (app.packageName to AppUpdateStatus.Checking)
 
-                                            updateStates = updateStates + (app.packageName to result)
+                                                val result = runCatching {
+                                                    ApkMirrorUpdateChecker.check(
+                                                        packageName = app.packageName,
+                                                        installedVersionCode = app.versionCode,
+                                                        device = profile.toDeviceSpec(),
+                                                        regularApkOnly = regularApkOnly
+                                                    )
+                                                }.getOrElse { error ->
+                                                    AppUpdateStatus.Error(
+                                                        message = error.message ?: "Unexpected APKMirror check error"
+                                                    )
+                                                }
 
-                                            if (index < apps.lastIndex) {
-                                                delay(900)
+                                                updateStates = updateStates + (app.packageName to result)
+
+                                                result.toCacheEntry(regularApkOnly)?.let { entry ->
+                                                    checkCache = checkCache + (app.packageName to entry)
+                                                }
+
+                                                if (index < apps.lastIndex) {
+                                                    delay(900)
+                                                }
                                             }
                                         }
                                     } finally {
@@ -254,17 +308,27 @@ fun APKScoutScreen() {
                         app = app,
                         status = updateStates[app.packageName] ?: AppUpdateStatus.NotChecked,
                         onCheckSource = {
-                            updateStates = updateStates + (app.packageName to AppUpdateStatus.Checking)
+                            val cachedStatus = checkCache[app.packageName].freshStatus(regularApkOnly)
 
-                            scope.launch {
-                                val result = ApkMirrorUpdateChecker.check(
-                                    packageName = app.packageName,
-                                    installedVersionCode = app.versionCode,
-                                    device = profile.toDeviceSpec(),
-                                    regularApkOnly = regularApkOnly
-                                )
+                            if (cachedStatus != null) {
+                                updateStates = updateStates + (app.packageName to cachedStatus)
+                            } else {
+                                updateStates = updateStates + (app.packageName to AppUpdateStatus.Checking)
 
-                                updateStates = updateStates + (app.packageName to result)
+                                scope.launch {
+                                    val result = ApkMirrorUpdateChecker.check(
+                                        packageName = app.packageName,
+                                        installedVersionCode = app.versionCode,
+                                        device = profile.toDeviceSpec(),
+                                        regularApkOnly = regularApkOnly
+                                    )
+
+                                    updateStates = updateStates + (app.packageName to result)
+
+                                    result.toCacheEntry(regularApkOnly)?.let { entry ->
+                                        checkCache = checkCache + (app.packageName to entry)
+                                    }
+                                }
                             }
                         },
                         onOpenSource = {
@@ -361,6 +425,7 @@ fun ControlsCard(
     regularApkOnly: Boolean,
     onRegularApkOnlyChange: (Boolean) -> Unit,
     summary: UpdateSummary,
+    cachedCount: Int,
     appCount: Int,
     checkingAll: Boolean,
     onCheckVisibleApps: () -> Unit
@@ -400,7 +465,7 @@ fun ControlsCard(
             }
 
             Text(
-                text = "Checked ${summary.checked}/${summary.total} • Checking ${summary.checking} • Updates ${summary.updates} • Up to date ${summary.upToDate} • Errors ${summary.errors}",
+                text = "Checked ${summary.checked}/${summary.total} • Checking ${summary.checking} • Updates ${summary.updates} • Up to date ${summary.upToDate} • Errors ${summary.errors} • Cached $cachedCount",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

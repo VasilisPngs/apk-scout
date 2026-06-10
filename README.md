@@ -14,6 +14,8 @@ Early Android 16+ Kotlin/Compose app.
 - Filters regular APK candidates
 - Rejects unsupported bundle-style formats by default
 - Compares compatible APK version codes when available
+- Caches successful APKMirror checks for 15 minutes
+- Supports per-app APKMirror refresh to bypass cache
 
 ## Package
 

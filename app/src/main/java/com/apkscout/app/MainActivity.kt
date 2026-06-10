@@ -331,6 +331,30 @@ fun APKScoutScreen() {
                                 }
                             }
                         },
+                        onRefreshSource = {
+                            updateStates = updateStates + (app.packageName to AppUpdateStatus.Checking)
+
+                            scope.launch {
+                                val result = runCatching {
+                                    ApkMirrorUpdateChecker.check(
+                                        packageName = app.packageName,
+                                        installedVersionCode = app.versionCode,
+                                        device = profile.toDeviceSpec(),
+                                        regularApkOnly = regularApkOnly
+                                    )
+                                }.getOrElse { error ->
+                                    AppUpdateStatus.Error(
+                                        message = error.message ?: "Unexpected APKMirror refresh error"
+                                    )
+                                }
+
+                                updateStates = updateStates + (app.packageName to result)
+
+                                result.toCacheEntry(regularApkOnly)?.let { entry ->
+                                    checkCache = checkCache + (app.packageName to entry)
+                                }
+                            }
+                        },
                         onOpenSource = {
                             openAPKMirror(
                                 context = context,
@@ -529,6 +553,7 @@ fun InstalledAppCard(
     app: InstalledApp,
     status: AppUpdateStatus,
     onCheckSource: () -> Unit,
+    onRefreshSource: () -> Unit,
     onOpenSource: () -> Unit
 ) {
     ElevatedCard(
@@ -582,23 +607,36 @@ fun InstalledAppCard(
 
             UpdateStatusBlock(status = status)
 
-            Row(
+            Column(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                Button(
-                    onClick = onCheckSource,
-                    modifier = Modifier.weight(1f),
-                    enabled = status !is AppUpdateStatus.Checking
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Text(if (status is AppUpdateStatus.Checking) "Checking" else "Check APKMirror")
+                    Button(
+                        onClick = onCheckSource,
+                        modifier = Modifier.weight(1f),
+                        enabled = status !is AppUpdateStatus.Checking
+                    ) {
+                        Text(if (status is AppUpdateStatus.Checking) "Checking" else "Check APKMirror")
+                    }
+
+                    Button(
+                        onClick = onOpenSource,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(openActionLabel(status))
+                    }
                 }
 
                 Button(
-                    onClick = onOpenSource,
-                    modifier = Modifier.weight(1f)
+                    onClick = onRefreshSource,
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = status !is AppUpdateStatus.Checking
                 ) {
-                    Text(openActionLabel(status))
+                    Text("Refresh APKMirror")
                 }
             }
         }

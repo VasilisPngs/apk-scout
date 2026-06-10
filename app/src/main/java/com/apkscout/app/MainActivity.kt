@@ -63,6 +63,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
@@ -118,6 +119,7 @@ fun APKScoutScreen() {
     val profile = rememberDeviceProfile(context)
     var includeSystemApps by remember { mutableStateOf(false) }
     var regularApkOnly by remember { mutableStateOf(true) }
+    var checkingAll by remember { mutableStateOf(false) }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
     var apps by remember { mutableStateOf<List<InstalledApp>>(emptyList()) }
     var updateStates by remember { mutableStateOf<Map<String, AppUpdateStatus>>(emptyMap()) }
@@ -169,7 +171,43 @@ fun APKScoutScreen() {
                         includeSystemApps = includeSystemApps,
                         onIncludeSystemAppsChange = { includeSystemApps = it },
                         regularApkOnly = regularApkOnly,
-                        onRegularApkOnlyChange = { regularApkOnly = it }
+                        onRegularApkOnlyChange = { regularApkOnly = it },
+                        appCount = apps.size,
+                        checkingAll = checkingAll,
+                        onCheckVisibleApps = {
+                            if (!checkingAll && apps.isNotEmpty()) {
+                                scope.launch {
+                                    checkingAll = true
+
+                                    try {
+                                        apps.forEachIndexed { index, app ->
+                                            updateStates = updateStates + (app.packageName to AppUpdateStatus.Checking)
+
+                                            val result = runCatching {
+                                                ApkMirrorUpdateChecker.check(
+                                                    packageName = app.packageName,
+                                                    installedVersionCode = app.versionCode,
+                                                    device = profile.toDeviceSpec(),
+                                                    regularApkOnly = regularApkOnly
+                                                )
+                                            }.getOrElse { error ->
+                                                AppUpdateStatus.Error(
+                                                    message = error.message ?: "Unexpected APKMirror check error"
+                                                )
+                                            }
+
+                                            updateStates = updateStates + (app.packageName to result)
+
+                                            if (index < apps.lastIndex) {
+                                                delay(900)
+                                            }
+                                        }
+                                    } finally {
+                                        checkingAll = false
+                                    }
+                                }
+                            }
+                        }
                     )
                 }
 
@@ -245,7 +283,7 @@ fun HeaderCard(
             )
 
             Text(
-                text = "External source update scout for Android apps.",
+                text = "APKMirror update scout for Android apps.",
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
@@ -286,7 +324,10 @@ fun ControlsCard(
     includeSystemApps: Boolean,
     onIncludeSystemAppsChange: (Boolean) -> Unit,
     regularApkOnly: Boolean,
-    onRegularApkOnlyChange: (Boolean) -> Unit
+    onRegularApkOnlyChange: (Boolean) -> Unit,
+    appCount: Int,
+    checkingAll: Boolean,
+    onCheckVisibleApps: () -> Unit
 ) {
     GlassCard {
         Column(
@@ -318,9 +359,23 @@ fun ControlsCard(
                 FilterChip(
                     selected = false,
                     onClick = {},
-                    label = { Text("More sources later") }
+                    label = { Text("APK-only filter") }
                 )
             }
+
+            Button(
+                onClick = onCheckVisibleApps,
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !checkingAll && appCount > 0
+            ) {
+                Text(if (checkingAll) "Checking visible apps" else "Check visible apps")
+            }
+
+            Text(
+                text = "Runs APKMirror checks one app at a time to avoid aggressive requests.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
         }
     }
 }

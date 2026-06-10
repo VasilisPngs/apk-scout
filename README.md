@@ -1,21 +1,19 @@
 # APKScout
 
-Android app update scout for external APK sources.
+APKMirror update scout for Android apps.
 
 ## Status
 
-Early Android 16+ Kotlin/Compose scaffold.
+Early Android 16+ Kotlin/Compose app.
 
-## Current source
+## Current behavior
 
-- APKMirror search launcher
-
-## Planned source architecture
-
-- APKMirror
-- GitHub Releases
-- F-Droid
-- IzzyOnDroid
+- Scans installed Android apps locally
+- Opens APKMirror search pages
+- Checks APKMirror pages one app at a time
+- Filters regular APK candidates
+- Rejects unsupported bundle-style formats by default
+- Compares compatible APK version codes when available
 
 ## Package
 

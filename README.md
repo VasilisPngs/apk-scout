@@ -16,6 +16,7 @@ Early Android 16+ Kotlin/Compose app.
 - Compares compatible APK version codes when available
 - Caches successful APKMirror checks for 15 minutes
 - Supports per-app APKMirror refresh to bypass cache
+- Batch checks only pending or failed visible apps
 
 ## Package
 

@@ -38,7 +38,6 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.LightMode
@@ -390,13 +389,28 @@ fun APKScoutScreen(
         }
     }
 
-    val visibleApps = remember(apps, updates, selectedFilter, searchQuery) {
+    val homeVisibleApps = remember(apps, updates, selectedFilter) {
         filterApps(
             apps = apps,
             updates = updates,
             filter = selectedFilter,
+            query = ""
+        )
+    }
+
+    val searchActiveApps = remember(apps, updates, searchQuery) {
+        filterApps(
+            apps = apps,
+            updates = updates,
+            filter = AppListFilter.ALL,
             query = searchQuery
         )
+    }
+
+    val activeVisibleApps = if (searchActive) {
+        searchActiveApps
+    } else {
+        homeVisibleApps
     }
 
     Box(
@@ -435,28 +449,28 @@ fun APKScoutScreen(
                         onQueryChange = { searchQuery = it }
                     )
                 }
-            }
+            } else {
+                item {
+                    HeaderCard(
+                        profile = profile,
+                        totalCount = apps.size,
+                        visibleCount = homeVisibleApps.size,
+                        loadingApps = loadingApps,
+                        checkingUpdates = checkingUpdates,
+                        updateError = updateError
+                    )
+                }
 
-            item {
-                HeaderCard(
-                    profile = profile,
-                    totalCount = apps.size,
-                    visibleCount = visibleApps.size,
-                    loadingApps = loadingApps,
-                    checkingUpdates = checkingUpdates,
-                    updateError = updateError
-                )
-            }
-
-            item {
-                ControlsCard(
-                    selectedFilter = selectedFilter,
-                    onFilterChange = { selectedFilter = it }
-                )
+                item {
+                    ControlsCard(
+                        selectedFilter = selectedFilter,
+                        onFilterChange = { selectedFilter = it }
+                    )
+                }
             }
 
             items(
-                items = visibleApps,
+                items = activeVisibleApps,
                 key = { it.packageName }
             ) { app ->
                 InstalledAppCard(

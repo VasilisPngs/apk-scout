@@ -166,39 +166,10 @@ fun APKScoutRoot() {
     Scaffold(
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         bottomBar = {
-            NavigationBar(
-                modifier = Modifier.height(56.dp),
-                tonalElevation = 0.dp,
-                windowInsets = WindowInsets(0, 0, 0, 0)
-            ) {
-                NavigationBarItem(
-                    selected = currentScreen == RootScreen.HOME,
-                    onClick = { currentScreen = RootScreen.HOME },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Rounded.Home,
-                            contentDescription = "Home",
-                            modifier = Modifier.size(22.dp)
-                        )
-                    },
-                    label = null,
-                    alwaysShowLabel = false
-                )
-
-                NavigationBarItem(
-                    selected = currentScreen == RootScreen.SETTINGS,
-                    onClick = { currentScreen = RootScreen.SETTINGS },
-                    icon = {
-                        Icon(
-                            imageVector = Icons.Rounded.Settings,
-                            contentDescription = "Settings",
-                            modifier = Modifier.size(22.dp)
-                        )
-                    },
-                    label = null,
-                    alwaysShowLabel = false
-                )
-            }
+            APKScoutBottomBar(
+                currentScreen = currentScreen,
+                onScreenChange = { currentScreen = it }
+            )
         }
     ) { innerPadding ->
         when (currentScreen) {
@@ -242,6 +213,56 @@ fun APKScoutRoot() {
         }
     }
 }
+
+@Composable
+private fun APKScoutBottomBar(
+    currentScreen: RootScreen,
+    onScreenChange: (RootScreen) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(MaterialTheme.colorScheme.surface)
+            .navigationBarsPadding()
+    ) {
+        NavigationBar(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(54.dp),
+            tonalElevation = 0.dp,
+            windowInsets = WindowInsets(0, 0, 0, 0)
+        ) {
+            NavigationBarItem(
+                selected = currentScreen == RootScreen.HOME,
+                onClick = { onScreenChange(RootScreen.HOME) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Home,
+                        contentDescription = "Home",
+                        modifier = Modifier.size(22.dp)
+                    )
+                },
+                label = null,
+                alwaysShowLabel = false
+            )
+
+            NavigationBarItem(
+                selected = currentScreen == RootScreen.SETTINGS,
+                onClick = { onScreenChange(RootScreen.SETTINGS) },
+                icon = {
+                    Icon(
+                        imageVector = Icons.Rounded.Settings,
+                        contentDescription = "Settings",
+                        modifier = Modifier.size(22.dp)
+                    )
+                },
+                label = null,
+                alwaysShowLabel = false
+            )
+        }
+    }
+}
+
 
 @Composable
 fun APKScoutScreen(

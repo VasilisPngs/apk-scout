@@ -14,7 +14,7 @@ Android 16+ Kotlin/Compose app.
 - Shows installed version to found version when update data is available
 - Shows installed version code to found version code when update data is available
 - Filters prerelease update channels from Settings
-- Shows device SDK, DPI, ABI profile, and device name
+- Shows Android version, DPI, and device name
 - Searches installed apps by app name or package name
 - Rescans installed apps and checks updates from the top refresh action
 - Opens APKMirror release pages for found updates and APKMirror search pages otherwise

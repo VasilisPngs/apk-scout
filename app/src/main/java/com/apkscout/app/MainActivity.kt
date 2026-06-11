@@ -108,8 +108,7 @@ data class UpdateInfo(
 data class DeviceProfile(
     val deviceName: String,
     val androidVersion: String,
-    val densityDpi: Int,
-    val abis: String
+    val densityDpi: Int
 )
 
 enum class AppListFilter {
@@ -272,7 +271,7 @@ fun APKScoutScreen(
     val context = LocalContext.current
     val profile = rememberDeviceProfile(context)
 
-    var selectedFilter by remember { mutableStateOf(AppListFilter.USER) }
+    var selectedFilter by remember { mutableStateOf(AppListFilter.ALL) }
     var searchQuery by remember { mutableStateOf("") }
     var searchVisible by remember { mutableStateOf(false) }
     var scanRequest by remember { mutableIntStateOf(0) }
@@ -481,8 +480,7 @@ fun rememberDeviceProfile(context: Context): DeviceProfile {
         DeviceProfile(
             deviceName = resolveDeviceName(),
             androidVersion = resolveAndroidVersion(),
-            densityDpi = context.resources.displayMetrics.densityDpi,
-            abis = Build.SUPPORTED_ABIS.joinToString()
+            densityDpi = context.resources.displayMetrics.densityDpi
         )
     }
 }
@@ -522,14 +520,6 @@ fun HeaderCard(
                     label = { Text("${profile.densityDpi} dpi") }
                 )
             }
-
-            Text(
-                text = "ABI: ${profile.abis}",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 2,
-                overflow = TextOverflow.Ellipsis
-            )
 
             Text(
                 text = when {

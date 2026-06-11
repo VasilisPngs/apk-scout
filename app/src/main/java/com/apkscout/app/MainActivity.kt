@@ -14,11 +14,10 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -40,7 +39,9 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.DarkMode
 import androidx.compose.material.icons.rounded.Home
+import androidx.compose.material.icons.rounded.LightMode
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Settings
@@ -48,7 +49,6 @@ import androidx.compose.material3.AssistChip
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -59,8 +59,6 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.darkColorScheme
-import androidx.compose.material3.dynamicDarkColorScheme
-import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -70,12 +68,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -129,24 +126,53 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         setContent {
-            APKScoutTheme {
-                APKScoutRoot()
+            val context = LocalContext.current
+            var darkMode by remember { mutableStateOf(SettingsStore.readDarkMode(context)) }
+
+            APKScoutTheme(darkMode = darkMode) {
+                APKScoutRoot(
+                    darkMode = darkMode,
+                    onDarkModeChange = { enabled ->
+                        darkMode = enabled
+                        SettingsStore.writeDarkMode(context, enabled)
+                    }
+                )
             }
         }
     }
 }
 
 @Composable
-fun APKScoutTheme(content: @Composable () -> Unit) {
-    val context = LocalContext.current
-    val isPreview = LocalInspectionMode.current
-    val dark = isSystemInDarkTheme()
-
-    val colors = when {
-        isPreview && dark -> darkColorScheme()
-        isPreview -> lightColorScheme()
-        dark -> dynamicDarkColorScheme(context)
-        else -> dynamicLightColorScheme(context)
+fun APKScoutTheme(
+    darkMode: Boolean,
+    content: @Composable () -> Unit
+) {
+    val colors = if (darkMode) {
+        darkColorScheme(
+            background = Color(0xFF121212),
+            surface = Color(0xFF242424),
+            surfaceVariant = Color(0xFF242424),
+            primary = Color(0xFFE3E3E3),
+            onPrimary = Color(0xFF121212),
+            onBackground = Color(0xFFF1F1F1),
+            onSurface = Color(0xFFF1F1F1),
+            onSurfaceVariant = Color(0xFFD6D6D6),
+            outline = Color(0xFF8D8D8D),
+            outlineVariant = Color(0xFF6E6E6E)
+        )
+    } else {
+        lightColorScheme(
+            background = Color(0xFFF3F3F3),
+            surface = Color(0xFFFFFFFF),
+            surfaceVariant = Color(0xFFFFFFFF),
+            primary = Color(0xFF1A1A1A),
+            onPrimary = Color(0xFFFFFFFF),
+            onBackground = Color(0xFF171717),
+            onSurface = Color(0xFF171717),
+            onSurfaceVariant = Color(0xFF4A4A4A),
+            outline = Color(0xFF737373),
+            outlineVariant = Color(0xFFD0D0D0)
+        )
     }
 
     MaterialTheme(
@@ -156,7 +182,10 @@ fun APKScoutTheme(content: @Composable () -> Unit) {
 }
 
 @Composable
-fun APKScoutRoot() {
+fun APKScoutRoot(
+    darkMode: Boolean,
+    onDarkModeChange: (Boolean) -> Unit
+) {
     val context = LocalContext.current
 
     var currentScreen by remember { mutableStateOf(RootScreen.HOME) }
@@ -175,7 +204,9 @@ fun APKScoutRoot() {
             RootScreen.HOME -> {
                 APKScoutScreen(
                     modifier = Modifier.padding(innerPadding),
-                    releaseSettings = releaseSettings
+                    releaseSettings = releaseSettings,
+                    darkMode = darkMode,
+                    onDarkModeChange = onDarkModeChange
                 )
             }
 
@@ -228,6 +259,7 @@ private fun APKScoutBottomBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .height(54.dp),
+            containerColor = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             windowInsets = WindowInsets(0, 0, 0, 0)
         ) {
@@ -262,11 +294,12 @@ private fun APKScoutBottomBar(
     }
 }
 
-
 @Composable
 fun APKScoutScreen(
     modifier: Modifier,
-    releaseSettings: ReleaseChannelSettings
+    releaseSettings: ReleaseChannelSettings,
+    darkMode: Boolean,
+    onDarkModeChange: (Boolean) -> Unit
 ) {
     val context = LocalContext.current
     val profile = rememberDeviceProfile(context)
@@ -330,14 +363,7 @@ fun APKScoutScreen(
     Box(
         modifier = modifier
             .fillMaxSize()
-            .background(
-                Brush.verticalGradient(
-                    colors = listOf(
-                        MaterialTheme.colorScheme.surface,
-                        MaterialTheme.colorScheme.surfaceVariant
-                    )
-                )
-            )
+            .background(MaterialTheme.colorScheme.background)
     ) {
         LazyColumn(
             modifier = Modifier
@@ -355,12 +381,14 @@ fun APKScoutScreen(
                 TopBar(
                     loading = loadingApps || checkingUpdates,
                     searchVisible = searchVisible,
+                    darkMode = darkMode,
                     onToggleSearch = {
                         searchVisible = !searchVisible
                         if (!searchVisible) {
                             searchQuery = ""
                         }
                     },
+                    onToggleTheme = { onDarkModeChange(!darkMode) },
                     onRefresh = {
                         scanRequest++
                         updateRequest++
@@ -419,7 +447,9 @@ fun APKScoutScreen(
 fun TopBar(
     loading: Boolean,
     searchVisible: Boolean,
+    darkMode: Boolean,
     onToggleSearch: () -> Unit,
+    onToggleTheme: () -> Unit,
     onRefresh: () -> Unit
 ) {
     Row(
@@ -440,6 +470,13 @@ fun TopBar(
             )
         }
 
+        IconButton(onClick = onToggleTheme) {
+            Icon(
+                imageVector = if (darkMode) Icons.Rounded.LightMode else Icons.Rounded.DarkMode,
+                contentDescription = if (darkMode) "Switch to light mode" else "Switch to dark mode"
+            )
+        }
+
         IconButton(
             onClick = onRefresh,
             enabled = !loading
@@ -457,7 +494,7 @@ fun SearchBarCard(
     query: String,
     onQueryChange: (String) -> Unit
 ) {
-    GlassCard {
+    UniformCard {
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
@@ -494,7 +531,7 @@ fun HeaderCard(
     checkingUpdates: Boolean,
     updateError: String?
 ) {
-    GlassCard {
+    UniformCard {
         Column(
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -545,7 +582,7 @@ fun ControlsCard(
     selectedFilter: AppListFilter,
     onFilterChange: (AppListFilter) -> Unit
 ) {
-    GlassCard {
+    UniformCard {
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -598,7 +635,7 @@ private fun CompactFilterButton(
                 color = if (selected) {
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.18f)
                 } else {
-                    MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+                    MaterialTheme.colorScheme.surface
                 },
                 shape = shape
             )
@@ -607,7 +644,7 @@ private fun CompactFilterButton(
                 color = if (selected) {
                     MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
                 } else {
-                    MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.70f)
+                    MaterialTheme.colorScheme.outlineVariant
                 },
                 shape = shape
             )
@@ -633,7 +670,14 @@ fun InstalledAppCard(
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.elevatedCardElevation(
+            defaultElevation = 0.dp,
+            pressedElevation = 0.dp,
+            focusedElevation = 0.dp,
+            hoveredElevation = 0.dp,
+            draggedElevation = 0.dp
         ),
         shape = RoundedCornerShape(24.dp)
     ) {
@@ -731,17 +775,17 @@ fun InstalledAppCard(
 }
 
 @Composable
-fun GlassCard(content: @Composable () -> Unit) {
+fun UniformCard(content: @Composable () -> Unit) {
     Surface(
         modifier = Modifier
             .fillMaxWidth()
             .border(
                 width = 1.dp,
-                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.42f),
+                color = MaterialTheme.colorScheme.outlineVariant,
                 shape = RoundedCornerShape(32.dp)
             ),
-        color = MaterialTheme.colorScheme.surface.copy(alpha = 0.62f),
-        tonalElevation = 3.dp,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
         shadowElevation = 0.dp,
         shape = RoundedCornerShape(32.dp)
     ) {
@@ -842,7 +886,6 @@ fun openAPKMirror(
     )
 }
 
-
 fun resolveAndroidVersion(): String {
     val release = Build.VERSION.RELEASE.orEmpty().trim()
 
@@ -850,7 +893,6 @@ fun resolveAndroidVersion(): String {
         Build.VERSION.SDK_INT.toString()
     }
 }
-
 
 fun resolveDeviceName(): String {
     val manufacturerRaw = Build.MANUFACTURER.orEmpty().trim()

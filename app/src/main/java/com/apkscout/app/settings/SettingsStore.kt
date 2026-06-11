@@ -9,6 +9,7 @@ object SettingsStore {
     private const val INCLUDE_BETA = "include_beta"
     private const val INCLUDE_RC = "include_rc"
     private const val INCLUDE_PRERELEASE = "include_prerelease"
+    private const val DARK_MODE = "dark_mode"
 
     fun read(context: Context): ReleaseChannelSettings {
         val prefs = context.getSharedPreferences(NAME, Context.MODE_PRIVATE)
@@ -33,6 +34,21 @@ object SettingsStore {
             .putBoolean(INCLUDE_BETA, settings.includeBeta)
             .putBoolean(INCLUDE_RC, settings.includeRc)
             .putBoolean(INCLUDE_PRERELEASE, settings.includePrerelease)
+            .apply()
+    }
+
+    fun readDarkMode(context: Context): Boolean {
+        return context.getSharedPreferences(NAME, Context.MODE_PRIVATE)
+            .getBoolean(DARK_MODE, true)
+    }
+
+    fun writeDarkMode(
+        context: Context,
+        enabled: Boolean
+    ) {
+        context.getSharedPreferences(NAME, Context.MODE_PRIVATE)
+            .edit()
+            .putBoolean(DARK_MODE, enabled)
             .apply()
     }
 }

@@ -13,6 +13,7 @@ Android 16+ Kotlin/Compose app.
 - Checks APKMirror update data through the APKMirror API-style backend
 - Shows installed version to found version when update data is available
 - Shows installed version code to found version code when update data is available
+- Filters prerelease update channels from Settings
 - Shows device SDK, DPI, ABI profile, and device name
 - Searches installed apps by app name or package name
 - Rescans installed apps and checks updates from the top refresh action
@@ -24,4 +25,4 @@ Android 16+ Kotlin/Compose app.
 
 ## Release asset
 
-`APKScout-v0.3.2.apk`
+`APKScout-v0.3.3.apk`

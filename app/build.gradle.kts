@@ -11,8 +11,8 @@ android {
         applicationId = "com.apkscout.app"
         minSdk = 36
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.3.2"
+        versionCode = 11
+        versionName = "0.3.3"
     }
 
     signingConfigs {
@@ -61,6 +61,7 @@ kotlin {
 }
 
 dependencies {
+    implementation("androidx.compose.material:material-icons-extended")
     implementation(libs.activity.compose)
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.foundation)

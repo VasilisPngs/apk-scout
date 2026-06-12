@@ -51,8 +51,6 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -487,18 +485,35 @@ private fun BottomBarItem(
     onClick: () -> Unit,
     icon: @Composable () -> Unit
 ) {
-    NavigationBarItem(
-        selected = selected,
-        onClick = onClick,
-        icon = icon,
-        label = null,
-        alwaysShowLabel = false,
-        colors = NavigationBarItemDefaults.colors(
-            selectedIconColor = MaterialTheme.colorScheme.onPrimary,
-            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-            indicatorColor = MaterialTheme.colorScheme.primary
-        )
-    )
+    val shape = RoundedCornerShape(999.dp)
+
+    Box(
+        modifier = Modifier
+            .width(86.dp)
+            .height(46.dp)
+            .clip(shape)
+            .background(
+                color = if (selected) {
+                    MaterialTheme.colorScheme.primary
+                } else {
+                    Color.Transparent
+                },
+                shape = shape
+            )
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center
+    ) {
+        Surface(
+            color = Color.Transparent,
+            contentColor = if (selected) {
+                MaterialTheme.colorScheme.onPrimary
+            } else {
+                MaterialTheme.colorScheme.onSurfaceVariant
+            }
+        ) {
+            icon()
+        }
+    }
 }
 
 @Composable

@@ -1059,41 +1059,42 @@ private fun resolveApkMirrorPackageFormat(
         return "APKM"
     }
 
-    val normalized = html
-        .replace("&nbsp;", " ")
-        .replace("&#8211;", "-")
-        .replace("&#8212;", "-")
-        .replace("&amp;", "&")
-        .replace(Regex("<[^>]+>"), " ")
-        .replace(Regex("\\s+"), " ")
-        .trim()
+    val code = versionCode.toString()
 
-    if (normalized.isBlank()) {
+    if (code.isBlank() || code == "0") {
         return "APK"
     }
 
-    val code = versionCode.toString()
-    val index = normalized.indexOf(code)
-
-    val window = if (index >= 0) {
-        normalized.substring(
-            startIndex = maxOf(0, index - 900),
-            endIndex = minOf(normalized.length, index + 1400)
-        )
-    } else {
-        normalized.take(5000)
+    val rowCandidates = buildList {
+        Regex("(?is)<tr[^>]*>.*?</tr>").findAll(html).forEach { add(it.value) }
+        Regex("(?is)<li[^>]*>.*?</li>").findAll(html).forEach { add(it.value) }
+        Regex("(?is)<div[^>]*(?:table-row|variant|download)[^>]*>.*?</div>").findAll(html).forEach { add(it.value) }
     }
 
-    val upper = window.uppercase()
+    val exactRows = rowCandidates.filter { it.contains(code) }
 
-    return if (
-        upper.contains("BUNDLE") ||
-        upper.contains("APKM") ||
-        upper.contains("APK BUNDLE")
+    if (exactRows.isEmpty()) {
+        return "APK"
+    }
+
+    return if (exactRows.any { row ->
+            val rowText = row
+                .replace("&nbsp;", " ")
+                .replace("&#8211;", "-")
+                .replace("&#8212;", "-")
+                .replace("&amp;", "&")
+                .replace(Regex("<[^>]+>"), " ")
+                .replace(Regex("\\s+"), " ")
+                .trim()
+                .uppercase()
+
+            rowText.contains("BUNDLE") || rowText.contains("APKM") || rowText.contains("APK BUNDLE")
+        }
     ) {
         "APKM"
     } else {
         "APK"
     }
 }
+
 

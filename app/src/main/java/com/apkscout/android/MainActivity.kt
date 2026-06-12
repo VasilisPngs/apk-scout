@@ -439,7 +439,7 @@ private fun APKScoutBottomBar(
                 .fillMaxWidth()
                 .height(62.dp),
             shape = RoundedCornerShape(31.dp),
-            color = MaterialTheme.colorScheme.outlineVariant,
+            color = MaterialTheme.colorScheme.surface,
             tonalElevation = 0.dp,
             shadowElevation = 0.dp
         ) {

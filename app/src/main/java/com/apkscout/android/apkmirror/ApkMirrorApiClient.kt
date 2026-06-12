@@ -162,7 +162,7 @@ object ApkMirrorApiClient {
                 versionName = foundVersionName,
                 versionCode = foundVersionCode,
                 url = releaseUrl,
-                formatLabel = bestApk.detectPackageFormat()
+                formatLabel = detectPackageFormat(bestApk, release, item)
             )
         }
 
@@ -207,14 +207,18 @@ object ApkMirrorApiClient {
         }
     }
 
-    private fun JSONObject.detectPackageFormat(): String {
-        val metadata = packageFormatMetadata()
+    private fun detectPackageFormat(vararg sources: JSONObject?): String {
+        val metadata = packageFormatMetadata(*sources)
 
-        return if ("apkm" in metadata || "bundle" in metadata || "split" in metadata) {
+        return if (metadata.containsApkmSignal()) {
             "APKM"
         } else {
             "APK"
         }
+    }
+
+    private fun JSONObject.detectPackageFormat(): String {
+        return detectPackageFormat(this)
     }
 
     private fun packageFormatScore(apk: JSONObject): Int {
@@ -225,32 +229,117 @@ object ApkMirrorApiClient {
         }
     }
 
-    private fun JSONObject.packageFormatMetadata(): String {
-        val keys = listOf(
-            "apk_type",
-            "file_type",
-            "type",
-            "variant_type",
-            "download_type",
-            "format",
-            "extension",
-            "file_extension",
-            "filename",
-            "file_name",
-            "name",
-            "title",
-            "link",
-            "url",
-            "download_url"
-        )
+    private fun packageFormatMetadata(vararg sources: JSONObject?): String {
+        return sources
+            .filterNotNull()
+            .joinToString(" ") { source -> source.collectPackageFormatText() }
+            .lowercase()
+    }
 
-        return keys
-            .mapNotNull { key ->
-                optString(key)
-                    .takeIf { it.isNotBlank() }
-                    ?.lowercase()
+    private fun JSONObject.packageFormatMetadata(): String {
+        return packageFormatMetadata(this)
+    }
+
+    private fun Any?.collectPackageFormatText(): String {
+        return when (this) {
+            null, JSONObject.NULL -> ""
+            is JSONArray -> {
+                (0 until length()).joinToString(" ") { index ->
+                    opt(index).collectPackageFormatText()
+                }
             }
-            .joinToString(" ")
+            is JSONObject -> {
+                val values = mutableListOf<String>()
+                val iterator = keys()
+
+                while (iterator.hasNext()) {
+                    val key = iterator.next()
+                    val normalizedKey = key.lowercase()
+                    val value = opt(key)
+
+                    when (value) {
+                        null, JSONObject.NULL -> Unit
+                        is Boolean -> {
+                            if (value && normalizedKey.isPackageFormatSignalKey()) {
+                                values += normalizedKey
+                            }
+                        }
+                        is JSONArray -> {
+                            if (value.length() > 0 && normalizedKey.isPackageFormatSignalKey()) {
+                                values += normalizedKey
+                            }
+
+                            val child = value.collectPackageFormatText()
+
+                            if (child.isNotBlank()) {
+                                values += child
+                            }
+                        }
+                        is JSONObject -> {
+                            val child = value.collectPackageFormatText()
+
+                            if (child.isNotBlank()) {
+                                if (normalizedKey.isPackageFormatSignalKey()) {
+                                    values += normalizedKey
+                                }
+
+                                values += child
+                            }
+                        }
+                        else -> {
+                            val text = value.toString().trim()
+
+                            if (text.isNotBlank() && text != "null") {
+                                if (normalizedKey.isPackageFormatSignalKey()) {
+                                    values += normalizedKey
+                                }
+
+                                values += text
+                            }
+                        }
+                    }
+                }
+
+                values.joinToString(" ")
+            }
+            is Boolean -> {
+                if (this) "true" else ""
+            }
+            else -> toString()
+        }
+    }
+
+    private fun String.isPackageFormatSignalKey(): Boolean {
+        val value = lowercase()
+
+        return "apkm" in value ||
+            "bundle" in value ||
+            "split" in value ||
+            "format" in value ||
+            "apk_type" in value ||
+            "file_type" in value ||
+            "variant_type" in value ||
+            "download_type" in value
+    }
+
+    private fun String.containsApkmSignal(): Boolean {
+        val normalized = lowercase()
+            .replace("_", " ")
+            .replace("-", " ")
+            .replace("%5b", "[")
+            .replace("%5d", "]")
+
+        return "apkm" in normalized ||
+            "apk bundles" in normalized ||
+            "apk bundle" in normalized ||
+            "app bundle" in normalized ||
+            "split apk" in normalized ||
+            "split apks" in normalized ||
+            "split config" in normalized ||
+            "base split" in normalized ||
+            "base config" in normalized ||
+            Regex("\\bbundle\\b").containsMatchIn(normalized) ||
+            Regex("\\bbundles\\b").containsMatchIn(normalized)
     }
 
     private data class DeviceTargetProfile(

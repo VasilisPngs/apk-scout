@@ -37,3 +37,5 @@ Android 16+ Kotlin/Compose app.
 - Tightened APKMirror compatibility filtering and shows APK/APKM format labels
 
 - Moves APK/APKM format labels next to the APKMirror action
+
+- Filters APKMirror updates by Android device target such as phone, Wear OS, TV, Auto, Automotive and VR

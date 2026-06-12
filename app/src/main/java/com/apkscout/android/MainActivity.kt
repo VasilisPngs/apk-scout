@@ -402,7 +402,7 @@ fun APKScoutScreen(
         checkingUpdates = true
         updateError = null
 
-        val result = ApkMirrorApiClient.checkUpdates(apps)
+        val result = ApkMirrorApiClient.checkUpdates(apps, packageManager = context.packageManager)
 
         rawUpdates = result.updates
         updateError = result.error

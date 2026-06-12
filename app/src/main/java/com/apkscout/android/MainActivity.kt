@@ -145,12 +145,32 @@ class MainActivity : ComponentActivity() {
 }
 
 private fun buildUpdateLine(installedVersionName: String, update: UpdateInfo): String {
-    val format = update.formatLabel
+    return "$installedVersionName -> ${update.versionName}"
+}
+
+@Composable
+private fun PackageFormatLabel(
+    formatLabel: String?,
+    modifier: Modifier = Modifier
+) {
+    val label = formatLabel
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
         ?: "APK"
 
-    return "$installedVersionName -> ${update.versionName} • $format"
+    Surface(
+        modifier = modifier,
+        shape = RoundedCornerShape(999.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer
+    ) {
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+            maxLines = 1
+        )
+    }
 }
 
 @Composable
@@ -824,6 +844,11 @@ fun InstalledAppCard(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.End
                 ) {
+                    PackageFormatLabel(
+                        formatLabel = update.formatLabel,
+                        modifier = Modifier.padding(end = 8.dp)
+                    )
+
                     Button(
                         onClick = onOpenAPKMirror,
                         contentPadding = PaddingValues(

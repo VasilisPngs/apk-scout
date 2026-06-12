@@ -423,12 +423,13 @@ private fun APKScoutBottomBar(
         modifier = Modifier
             .fillMaxWidth()
             .navigationBarsPadding()
-            .padding(start = 14.dp, end = 14.dp, bottom = 10.dp),
+            .padding(bottom = 10.dp),
         contentAlignment = Alignment.Center
     ) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
+                .padding(horizontal = 14.dp)
                 .height(62.dp),
             shape = RoundedCornerShape(31.dp),
             color = MaterialTheme.colorScheme.surfaceVariant,
@@ -492,7 +493,7 @@ private fun BottomBarItem(
 
     Box(
         modifier = Modifier
-            .width(96.dp)
+            .weight(1f)
             .height(50.dp)
             .clip(shape)
             .clickable(onClick = onClick),
@@ -501,7 +502,7 @@ private fun BottomBarItem(
         if (selected) {
             Surface(
                 modifier = Modifier
-                    .width(90.dp)
+                    .width(92.dp)
                     .height(44.dp),
                 shape = shape,
                 color = MaterialTheme.colorScheme.primary,

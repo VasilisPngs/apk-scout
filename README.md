@@ -28,8 +28,10 @@ Android 16+ Kotlin/Compose app.
 
 ## Release asset
 
-`APKScout-v0.4.0.apk`
+`APKScout-v0.4.1.apk`
 
 - Package ID changed to `com.apkscout.android`
 - Home starts on Updates and no longer shows device hardware header
 - Home filter order is Updates, User, System, All with visible count below
+
+- Tightened APKMirror compatibility filtering and shows APK/APKM/APKS format labels

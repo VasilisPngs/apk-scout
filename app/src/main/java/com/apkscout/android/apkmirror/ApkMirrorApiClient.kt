@@ -143,7 +143,8 @@ object ApkMirrorApiClient {
             updates[packageName] = UpdateInfo(
                 versionName = foundVersionName,
                 versionCode = foundVersionCode,
-                url = releaseUrl
+                url = releaseUrl,
+                formatLabel = bestApk.detectPackageFormat()
             )
         }
 
@@ -151,28 +152,30 @@ object ApkMirrorApiClient {
     }
 
     private fun findBestApk(
-        apks: JSONArray,
-        installedVersionCode: Long
-    ): JSONObject? {
-        val candidates = mutableListOf<JSONObject>()
+    apks: JSONArray,
+    installedVersionCode: Long
+): JSONObject? {
+    val candidates = mutableListOf<JSONObject>()
 
-        for (index in 0 until apks.length()) {
-            val apk = apks.optJSONObject(index) ?: continue
-            val versionCode = apk.optVersionCode() ?: continue
+    for (index in 0 until apks.length()) {
+        val apk = apks.optJSONObject(index) ?: continue
+        val versionCode = apk.optVersionCode() ?: continue
 
-            if (versionCode <= installedVersionCode) continue
-            if (!isMinApiCompatible(apk.optString("minapi"))) continue
-            if (!isArchitectureCompatible(apk.optJSONArray("arches"))) continue
+        if (versionCode <= installedVersionCode) continue
+        if (!isSdkCompatible(apk)) continue
+        if (!isArchitectureCompatible(apk.optFlexibleArray("arches"))) continue
 
-            candidates += apk
-        }
-
-        return candidates.maxByOrNull {
-            it.optVersionCode() ?: 0L
-        }
+        candidates += apk
     }
 
-    private fun JSONObject.optVersionCode(): Long? {
+    return candidates.maxWithOrNull(
+        compareBy<JSONObject> { it.optVersionCode() ?: 0L }
+            .thenBy { packageFormatScore(it) }
+            .thenBy { compatibilityScore(it) }
+    )
+}
+
+private fun JSONObject.optVersionCode(): Long? {
         val raw = opt("version_code") ?: opt("versionCode") ?: return null
 
         return when (raw) {
@@ -182,50 +185,197 @@ object ApkMirrorApiClient {
         }
     }
 
-    private fun isMinApiCompatible(minApi: String?): Boolean {
-        val raw = minApi?.trim().orEmpty()
+    private fun isSdkCompatible(apk: JSONObject): Boolean {
+    val minApi = apk.firstString(
+        "minapi",
+        "min_api",
+        "minSdk",
+        "min_sdk",
+        "minsdk",
+        "minimum_api",
+        "minimum_android"
+    )
 
-        if (raw.isBlank()) return true
+    val maxApi = apk.firstString(
+        "maxapi",
+        "max_api",
+        "maxSdk",
+        "max_sdk",
+        "maxsdk",
+        "maximum_api",
+        "maximum_android"
+    )
 
-        val apiValue = Regex("(?i)api\\s*(\\d{1,2})")
-            .find(raw)
-            ?.groupValues
-            ?.getOrNull(1)
-            ?.toIntOrNull()
+    return isMinApiCompatible(minApi) && isMaxApiCompatible(maxApi)
+}
 
-        if (apiValue != null) {
-            return apiValue <= Build.VERSION.SDK_INT
-        }
+private fun isMinApiCompatible(minApi: String?): Boolean {
+    val apiValue = extractSdkValue(minApi) ?: return true
+    return apiValue <= Build.VERSION.SDK_INT
+}
 
-        val directValue = raw.toIntOrNull()
+private fun isMaxApiCompatible(maxApi: String?): Boolean {
+    val apiValue = extractSdkValue(maxApi) ?: return true
+    return apiValue >= Build.VERSION.SDK_INT
+}
 
-        if (directValue != null) {
-            return directValue <= Build.VERSION.SDK_INT
-        }
+private fun extractSdkValue(raw: String?): Int? {
+    val value = raw?.trim()?.lowercase().orEmpty()
 
-        return true
+    if (value.isBlank()) return null
+
+    Regex("api\\s*(\\d{1,2})")
+        .find(value)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.toIntOrNull()
+        ?.let { return it }
+
+    Regex("sdk\\D*(\\d{1,2})")
+        .find(value)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.toIntOrNull()
+        ?.let { return it }
+
+    if (value.matches(Regex("\\d{1,2}"))) {
+        return value.toIntOrNull()
     }
 
-    private fun isArchitectureCompatible(arches: JSONArray?): Boolean {
-        if (arches == null || arches.length() == 0) return true
+    Regex("android\\s*(\\d{1,2})(?:\\.\\d+)?")
+        .find(value)
+        ?.groupValues
+        ?.getOrNull(1)
+        ?.toIntOrNull()
+        ?.let { major -> return androidMajorToSdk(major) }
 
-        val deviceAbis = Build.SUPPORTED_ABIS
-            .map { it.lowercase() }
-            .toSet()
+    return null
+}
 
-        for (index in 0 until arches.length()) {
-            val arch = arches.optString(index).lowercase().trim()
+private fun androidMajorToSdk(major: Int): Int? {
+    return when (major) {
+        4 -> 14
+        5 -> 21
+        6 -> 23
+        7 -> 24
+        8 -> 26
+        9 -> 28
+        10 -> 29
+        11 -> 30
+        12 -> 31
+        13 -> 33
+        14 -> 34
+        15 -> 35
+        16 -> 36
+        else -> null
+    }
+}
 
-            if (arch.isBlank()) continue
-            if (arch in setOf("universal", "noarch", "all", "any")) return true
-            if (arch in deviceAbis) return true
-            if (deviceAbis.any { abi -> arch.contains(abi) }) return true
-        }
+private fun isArchitectureCompatible(arches: JSONArray?): Boolean {
+    if (arches == null || arches.length() == 0) return true
 
-        return false
+    val apkArches = arches.extractArchitectureSet()
+
+    if (apkArches.isEmpty()) return true
+    if ("universal" in apkArches) return true
+
+    val deviceArches = Build.SUPPORTED_ABIS
+        .flatMap { abi -> extractArchitectureTokens(abi) }
+        .toSet()
+
+    return apkArches.any { arch -> arch in deviceArches }
+}
+
+private fun compatibilityScore(apk: JSONObject): Int {
+    val arches = apk.optFlexibleArray("arches") ?: return 1
+    if (arches.length() == 0) return 1
+
+    return if (hasDirectArchitectureMatch(arches)) {
+        2
+    } else {
+        0
+    }
+}
+
+private fun hasDirectArchitectureMatch(arches: JSONArray): Boolean {
+    val apkArches = arches.extractArchitectureSet()
+
+    if ("universal" in apkArches) return true
+
+    val deviceArches = Build.SUPPORTED_ABIS
+        .flatMap { abi -> extractArchitectureTokens(abi) }
+        .toSet()
+
+    return apkArches.any { arch -> arch in deviceArches }
+}
+
+private fun JSONArray.extractArchitectureSet(): Set<String> {
+    val result = linkedSetOf<String>()
+
+    for (index in 0 until length()) {
+        result += extractArchitectureTokens(optString(index))
     }
 
-    private fun String.cleanErrorBody(): String {
+    return result
+}
+
+private fun extractArchitectureTokens(raw: String): Set<String> {
+    val result = linkedSetOf<String>()
+
+    normalizeArchitecture(raw)?.let { result += it }
+
+    raw.lowercase()
+        .replace("_", "-")
+        .split(Regex("[,;+/\\s]+"))
+        .forEach { token ->
+            normalizeArchitecture(token)?.let { result += it }
+        }
+
+    return result
+}
+
+private fun normalizeArchitecture(raw: String): String? {
+    val value = raw
+        .lowercase()
+        .replace("_", "-")
+        .trim()
+
+    return when {
+        value.isBlank() -> null
+        value in setOf("universal", "noarch", "all", "any") -> "universal"
+        "arm64" in value || "aarch64" in value -> "arm64-v8a"
+        "armeabi-v7a" in value || "arm-v7a" in value || "armv7" in value || value == "armeabi" || value == "arm" -> "armeabi-v7a"
+        "x86-64" in value || "x8664" in value || value == "x64" -> "x86_64"
+        value == "x86" || "x86" in value -> "x86"
+        else -> null
+    }
+}
+
+private fun JSONObject.optFlexibleArray(name: String): JSONArray? {
+    val value = opt(name) ?: return null
+
+    return when (value) {
+        is JSONArray -> value
+        JSONObject.NULL -> null
+        is String -> value.takeIf { it.isNotBlank() }?.let { JSONArray().put(it) }
+        else -> JSONArray().put(value.toString())
+    }
+}
+
+private fun JSONObject.firstString(vararg keys: String): String? {
+    for (key in keys) {
+        val value = opt(key) ?: continue
+        val text = value.toString().trim()
+
+        if (text.isNotBlank() && text != "null") {
+            return text
+        }
+    }
+
+    return null
+}
+
+private fun String.cleanErrorBody(): String {
         return replace(Regex("\\s+"), " ")
             .take(220)
             .ifBlank { "empty response body" }

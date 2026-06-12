@@ -99,7 +99,8 @@ data class InstalledApp(
 data class UpdateInfo(
     val versionName: String,
     val versionCode: Long,
-    val url: String
+    val url: String,
+    val formatLabel: String? = null
 )
 
 data class DeviceProfile(
@@ -141,6 +142,15 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+private fun buildUpdateLine(installedVersionName: String, update: UpdateInfo): String {
+    val format = update.formatLabel
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+        ?: "APK"
+
+    return "$installedVersionName -> ${update.versionName} • $format"
 }
 
 @Composable
@@ -793,7 +803,7 @@ fun InstalledAppCard(
                         text = if (update == null) {
                             "Installed: ${app.versionName}"
                         } else {
-                            "${app.versionName} -> ${update.versionName}"
+                            buildUpdateLine(app.versionName, update)
                         },
                         style = MaterialTheme.typography.bodyLarge,
                         color = MaterialTheme.colorScheme.onSurface

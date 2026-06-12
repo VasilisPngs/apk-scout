@@ -15,6 +15,8 @@ import okhttp3.Response
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.concurrent.TimeUnit
+import android.content.res.Resources
+import kotlin.math.abs
 
 data class ApkMirrorCheckResult(
     val updates: Map<String, UpdateInfo>,
@@ -188,9 +190,10 @@ object ApkMirrorApiClient {
 
         return candidates.maxWithOrNull(
             compareBy<JSONObject> { it.optVersionCode() ?: 0L }
-                .thenBy { packageFormatScore(it) }
-                .thenBy { architectureScore(it) }
                 .thenBy { deviceTargetScore(it, packageManager) }
+                .thenBy { architectureScore(it) }
+                .thenBy { dpiScore(it) }
+                .thenBy { packageFormatScore(it) }
         )
     }
 
@@ -512,6 +515,187 @@ object ApkMirrorApiClient {
         }
 
         return result
+    }
+
+    private data class DpiTarget(
+        val hasMetadata: Boolean,
+        val isDensityIndependent: Boolean,
+        val densities: Set<Int>
+    )
+
+    private fun dpiScore(apk: JSONObject): Int {
+        val target = apk.dpiTarget()
+        val deviceDensity = currentDeviceDensityDpi()
+
+        if (!target.hasMetadata) return 95_000
+        if (target.densities.contains(deviceDensity)) return 100_000
+        if (target.isDensityIndependent) return 90_000
+        if (target.densities.isEmpty()) return 85_000
+
+        val bestDensity = target.densities.minWithOrNull(
+            compareBy<Int> { abs(it - deviceDensity) }
+                .thenBy { if (it >= deviceDensity) 0 else 1 }
+        ) ?: return 80_000
+
+        val distance = abs(bestDensity - deviceDensity).coerceAtMost(50_000)
+        val higherTieBonus = if (bestDensity >= deviceDensity) 1 else 0
+
+        return 80_000 - distance + higherTieBonus
+    }
+
+    private fun currentDeviceDensityDpi(): Int {
+        return Resources.getSystem()
+            .displayMetrics
+            .densityDpi
+            .takeIf { it > 0 }
+            ?: 420
+    }
+
+    private fun JSONObject.dpiTarget(): DpiTarget {
+        val metadata = dpiTargetMetadata()
+
+        if (metadata.isBlank()) {
+            return DpiTarget(
+                hasMetadata = false,
+                isDensityIndependent = false,
+                densities = emptySet()
+            )
+        }
+
+        val normalized = metadata
+            .lowercase()
+            .replace("_", " ")
+            .replace("-", " ")
+
+        val densityIndependent =
+            "nodpi" in normalized ||
+            "no dpi" in normalized ||
+            "anydpi" in normalized ||
+            "any dpi" in normalized ||
+            "all dpi" in normalized ||
+            "all densities" in normalized ||
+            "universal" in normalized
+
+        val allowedDensities = listOf(
+            120,
+            160,
+            213,
+            240,
+            280,
+            320,
+            360,
+            400,
+            420,
+            480,
+            560,
+            640
+        )
+
+        val densityPattern = allowedDensities.joinToString("|")
+        val densities = linkedSetOf<Int>()
+
+        Regex("\\b(?:dpi|dpis|density|densities)\\s*($densityPattern)\\b")
+            .findAll(normalized)
+            .mapNotNull { match -> match.groupValues.getOrNull(1)?.toIntOrNull() }
+            .forEach { value -> densities += value }
+
+        Regex("\\b($densityPattern)\\s*(?:dpi|dpis|density|densities)\\b")
+            .findAll(normalized)
+            .mapNotNull { match -> match.groupValues.getOrNull(1)?.toIntOrNull() }
+            .forEach { value -> densities += value }
+
+        return DpiTarget(
+            hasMetadata = true,
+            isDensityIndependent = densityIndependent,
+            densities = densities
+        )
+    }
+
+    private fun JSONObject.dpiTargetMetadata(): String {
+        val values = mutableListOf<String>()
+
+        val explicitKeys = listOf(
+            "dpi",
+            "dpis",
+            "density",
+            "densities",
+            "density_dpi",
+            "screen_density",
+            "screen_densities",
+            "display_density",
+            "display_densities",
+            "variant_dpi",
+            "variant_density",
+            "supported_dpi",
+            "supported_dpis",
+            "supported_density",
+            "supported_densities",
+            "resolution",
+            "resolutions",
+            "filename",
+            "file_name",
+            "name",
+            "title",
+            "label",
+            "link",
+            "url",
+            "download_url"
+        )
+
+        explicitKeys.forEach { key ->
+            val value = opt(key)
+
+            if (value != null && value != JSONObject.NULL) {
+                values += key
+                values += value.collectDpiTargetText()
+            }
+        }
+
+        val iterator = keys()
+
+        while (iterator.hasNext()) {
+            val key = iterator.next()
+            val normalizedKey = key.lowercase()
+
+            if (
+                "dpi" in normalizedKey ||
+                "density" in normalizedKey ||
+                "resolution" in normalizedKey
+            ) {
+                val value = opt(key)
+
+                if (value != null && value != JSONObject.NULL) {
+                    values += key
+                    values += value.collectDpiTargetText()
+                }
+            }
+        }
+
+        return values.joinToString(" ")
+    }
+
+    private fun Any?.collectDpiTargetText(): String {
+        return when (this) {
+            null, JSONObject.NULL -> ""
+            is JSONArray -> {
+                (0 until length()).joinToString(" ") { index ->
+                    opt(index).collectDpiTargetText()
+                }
+            }
+            is JSONObject -> {
+                val values = mutableListOf<String>()
+                val iterator = keys()
+
+                while (iterator.hasNext()) {
+                    val key = iterator.next()
+                    values += key
+                    values += opt(key).collectDpiTargetText()
+                }
+
+                values.joinToString(" ")
+            }
+            else -> toString()
+        }
     }
 
     private fun isSdkCompatible(apk: JSONObject): Boolean {

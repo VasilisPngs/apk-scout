@@ -8,6 +8,7 @@ import com.apkscout.android.UpdateInfo
 import kotlin.math.abs
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import okhttp3.Credentials
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -61,6 +62,8 @@ data class ApkMirrorCheckResult(
 
 object ApkMirrorApiClient {
     private const val ENDPOINT = "https://www.apkmirror.com/wp-json/apkm/v1/app_exists/"
+    private const val API_USER = "api-apkupdater"
+    private const val API_TOKEN = "rm5rcfruUjKy04sMpyMPJXW8"
     private const val PACKAGE_CHUNK_SIZE = 60
 
     private val jsonMediaType = "application/json; charset=utf-8".toMediaType()
@@ -116,6 +119,7 @@ object ApkMirrorApiClient {
         val request = Request.Builder()
             .url(ENDPOINT)
             .header("User-Agent", "APKScout/${Build.VERSION.SDK_INT}")
+            .header("Authorization", Credentials.basic(API_USER, API_TOKEN))
             .post(bodyJson.toString().toRequestBody(jsonMediaType))
             .build()
 

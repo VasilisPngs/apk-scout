@@ -8,7 +8,6 @@ import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
-import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -71,14 +70,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.apkscout.android.apkmirror.ApkMirrorApiClient
 import com.apkscout.android.apkmirror.ApkMirrorSource
 import com.apkscout.android.settings.ReleaseChannelFilter
-import com.apkscout.android.settings.ReleaseChannelSettings
 import com.apkscout.android.settings.SettingsStore
 import com.apkscout.android.ui.SettingsScreen
 import java.util.Locale
@@ -97,9 +94,8 @@ data class InstalledApp(
 data class UpdateInfo(
     val versionName: String,
     val versionCode: Long,
-    val url: String,
-    val formatLabel: String? = null,
-    val packageFormat: String = "APK")
+    val url: String
+)
 
 enum class AppListFilter {
     ALL,
@@ -760,8 +756,6 @@ fun InstalledAppCard(
     update: UpdateInfo?,
     onOpenAPKMirror: () -> Unit
 ) {
-    val packageFormatLabel = update?.packageFormat ?: "APK"
-
     ElevatedCard(
         modifier = Modifier.fillMaxWidth(),
         colors = CardDefaults.elevatedCardColors(
@@ -827,13 +821,6 @@ fun InstalledAppCard(
                     horizontalArrangement = Arrangement.End,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    update?.formatLabel
-                        ?.trim()
-                        ?.takeIf { it.isNotEmpty() }
-                        ?.let {
-                            PackageFormatLabel(format = packageFormatLabel)
-                        }
-
                     Button(
                         onClick = onOpenAPKMirror,
                         contentPadding = PaddingValues(
@@ -930,29 +917,6 @@ private fun VersionBlock(
         )
     }
 }
-@Composable
-private fun PackageFormatLabel(format: String?) {
-    val label = when (format?.uppercase()) {
-        "APKM" -> "APKM"
-        else -> "APK"
-    }
-
-    Surface(
-        shape = RoundedCornerShape(999.dp),
-        color = MaterialTheme.colorScheme.primary,
-        contentColor = MaterialTheme.colorScheme.onPrimary,
-        tonalElevation = 0.dp,
-        shadowElevation = 0.dp
-    ) {
-        Text(
-            text = label,
-            modifier = Modifier.padding(horizontal = 18.dp, vertical = 8.dp),
-            style = MaterialTheme.typography.titleMedium
-        )
-    }
-}
-
-
 @Composable
 fun UniformCard(content: @Composable () -> Unit) {
     Surface(

@@ -31,20 +31,6 @@ private val NON_PRIMARY_TRACK_REGEX = listOf(
     Regex("\\blite release\\b")
 )
 
-private val APKM_BUNDLE_REGEX = Regex("\\bbundles?\\b")
-
-private val PLAIN_APK_REGEX = listOf(
-    Regex("\\bapk files?\\b"),
-    Regex("\\bplain apk\\b"),
-    Regex("\\bapk type\\s*apk\\b"),
-    Regex("\\bfile type\\s*apk\\b"),
-    Regex("\\bvariant type\\s*apk\\b"),
-    Regex("\\bdownload type\\s*apk\\b"),
-    Regex("\\bformat\\s*apk\\b")
-)
-
-private val PLAIN_APK_BARE_REGEX = Regex("\\bapk\\b")
-
 private val SDK_API_REGEX = Regex("api\\s*(\\d+)")
 private val SDK_SDK_REGEX = Regex("sdk\\D*(\\d+)")
 private val SDK_BARE_REGEX = Regex("\\d+")
@@ -176,7 +162,7 @@ object ApkMirrorApiClient {
 
             val apks = item.optJSONArray("apks") ?: continue
 
-            val selection = selectBestApk(
+            val bestApk = selectBestApk(
                 apks = apks,
                 installedVersionCode = installed.versionCode,
                 packageManager = packageManager,
@@ -184,7 +170,7 @@ object ApkMirrorApiClient {
                 release = release
             ) ?: continue
 
-            val foundVersionCode = selection.apk.optVersionCode() ?: continue
+            val foundVersionCode = bestApk.optVersionCode() ?: continue
 
             if (foundVersionCode <= installed.versionCode) continue
 
@@ -194,27 +180,19 @@ object ApkMirrorApiClient {
                 ?: continue
 
             val releaseUrl = ApkMirrorSource.absoluteUrl(release.optString("link"))
-                ?: selection.apk.optString("link").takeIf { it.isNotBlank() }
+                ?: bestApk.optString("link").takeIf { it.isNotBlank() }
                     ?.let { ApkMirrorSource.absoluteUrl(it) }
                 ?: ApkMirrorSource.searchUrl(packageName).toString()
 
             updates[packageName] = UpdateInfo(
                 versionName = foundVersionName,
                 versionCode = foundVersionCode,
-                url = releaseUrl,
-                formatLabel = selection.formatLabel,
-                packageFormat = selection.packageFormat
+                url = releaseUrl
             )
         }
 
         return updates
     }
-
-    private data class ApkSelection(
-        val apk: JSONObject,
-        val formatLabel: String,
-        val packageFormat: String
-    )
 
     private fun selectBestApk(
         apks: JSONArray,
@@ -222,7 +200,7 @@ object ApkMirrorApiClient {
         packageManager: PackageManager?,
         item: JSONObject,
         release: JSONObject
-    ): ApkSelection? {
+    ): JSONObject? {
         val candidates = mutableListOf<JSONObject>()
 
         for (index in 0 until apks.length()) {
@@ -245,16 +223,9 @@ object ApkMirrorApiClient {
                 .thenBy { deviceTargetScore(it, packageManager) }
                 .thenBy { architectureScore(it) }
                 .thenBy { dpiScore(it) }
-                .thenBy { packageFormatScore(it) }
         ) ?: return null
 
-        val format = detectDisplayedPackageFormat(candidates, release, item)
-
-        return ApkSelection(
-            apk = bestApk,
-            formatLabel = format,
-            packageFormat = format
-        )
+        return bestApk
     }
 
     private fun JSONObject.optVersionCode(): Long? {
@@ -288,131 +259,6 @@ object ApkMirrorApiClient {
             .replace(".", " ")
 
         return NON_PRIMARY_TRACK_REGEX.any { it.containsMatchIn(normalized) }
-    }
-
-    private fun detectDisplayedPackageFormat(
-        candidates: List<JSONObject>,
-        vararg sources: JSONObject?
-    ): String {
-        if (candidates.any { it.detectPackageFormat() == "APK" }) return "APK"
-        if (candidates.any { it.detectPackageFormat() == "APKM" }) return "APKM"
-
-        val metadata = packageFormatMetadata(*sources)
-
-        return when {
-            metadata.containsPlainApkSignal() -> "APK"
-            metadata.containsApkmSignal() -> "APKM"
-            else -> "APK"
-        }
-    }
-
-    private fun JSONObject.detectPackageFormat(): String {
-        val metadata = packageFormatMetadata(this)
-
-        return when {
-            metadata.containsPlainApkSignal() -> "APK"
-            metadata.containsApkmSignal() -> "APKM"
-            else -> "APK"
-        }
-    }
-
-    private fun packageFormatScore(apk: JSONObject): Int {
-        return when (apk.detectPackageFormat()) {
-            "APK" -> 2
-            "APKM" -> 1
-            else -> 0
-        }
-    }
-
-    private fun packageFormatMetadata(vararg sources: JSONObject?): String {
-        return sources
-            .filterNotNull()
-            .joinToString(" ") { source -> source.collectPackageFormatText() }
-            .lowercase()
-    }
-
-    private fun Any?.collectPackageFormatText(): String {
-        return when (this) {
-            null, JSONObject.NULL -> ""
-            is JSONArray -> {
-                (0 until length()).joinToString(" ") { index ->
-                    opt(index).collectPackageFormatText()
-                }
-            }
-            is JSONObject -> {
-                val values = mutableListOf<String>()
-                val iterator = keys()
-
-                while (iterator.hasNext()) {
-                    val key = iterator.next()
-                    val value = opt(key)
-                    val normalizedKey = key.lowercase()
-
-                    if (value != null && value != JSONObject.NULL) {
-                        if (normalizedKey.isPackageFormatSignalKey()) {
-                            values += normalizedKey
-                        }
-
-                        values += value.collectPackageFormatText()
-                    }
-                }
-
-                values.joinToString(" ")
-            }
-            is Boolean -> if (this) "true" else ""
-            else -> toString()
-        }
-    }
-
-    private fun String.isPackageFormatSignalKey(): Boolean {
-        val value = lowercase()
-
-        return "apkm" in value ||
-            "bundle" in value ||
-            "split" in value ||
-            "format" in value ||
-            "apk_type" in value ||
-            "file_type" in value ||
-            "variant_type" in value ||
-            "download_type" in value
-    }
-
-    private fun String.containsApkmSignal(): Boolean {
-        val normalized = lowercase()
-            .replace("_", " ")
-            .replace("-", " ")
-            .replace("%5b", "[")
-            .replace("%5d", "]")
-
-        return "apkm" in normalized ||
-            "apk bundle" in normalized ||
-            "apk bundles" in normalized ||
-            "app bundle" in normalized ||
-            "split apk" in normalized ||
-            "split apks" in normalized ||
-            "split config" in normalized ||
-            "base split" in normalized ||
-            "base config" in normalized ||
-            APKM_BUNDLE_REGEX.containsMatchIn(normalized)
-    }
-
-    private fun String.containsPlainApkSignal(): Boolean {
-        val strong = lowercase()
-            .replace("_", " ")
-            .replace("-", " ")
-            .replace("%5b", "[")
-            .replace("%5d", "]")
-
-        if (PLAIN_APK_REGEX.any { it.containsMatchIn(strong) }) return true
-        if (containsApkmSignal()) return false
-
-        val normalized = strong
-            .replace("apkmirror", " ")
-            .replace("android apk download", " ")
-            .replace("apk download", " ")
-            .replace("apkm", " ")
-
-        return PLAIN_APK_BARE_REGEX.containsMatchIn(normalized)
     }
 
     private data class DeviceTargetProfile(
